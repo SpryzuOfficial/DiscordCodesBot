@@ -3,6 +3,8 @@ require('dotenv').config();
 const fs = require('fs');
 const {Client, Intents} = require('discord.js');
 
+const keepAlive = require('./server');
+
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 
 client.on('ready', () =>
@@ -110,5 +112,10 @@ client.on('messageCreate', async(message) =>
         await message.channel.send('Saved in DB');
     }
 });
+
+if(process.env.PRODUCTION == 1)
+{
+    keepAlive();
+}
 
 client.login(process.env.TOKEN);
