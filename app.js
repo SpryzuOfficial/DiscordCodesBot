@@ -98,6 +98,28 @@ client.on('messageCreate', async(message) =>
 
                 fs.writeFileSync(path, JSON.stringify(data));
             }
+
+            if(command == '*stock')
+            {
+                if(args[0] != undefined)
+                {
+                    const name = args[0].toLowerCase();
+
+                    const path = './db/data.json';
+                    const data = JSON.parse(fs.readFileSync(path));
+
+                    const names = [];
+                    data.data.forEach((element, index) =>
+                    {
+                        if(element.name == name)
+                        {
+                            names.push({element, index});
+                        }
+                    });
+
+                    await message.channel.send(names.length + " " + name + ' codes in stock');
+                }
+            }
         }
 
         if(message.member.roles.cache.has(process.env.ADM))
