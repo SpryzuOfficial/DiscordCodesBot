@@ -49,6 +49,8 @@ client.on('messageCreate', async(message) =>
                 const user = message.author.id;
                 const time = new Date().getTime();
 
+                let timeLeft;
+
                 let band = true;
                 datau.users.forEach(async(element, i) =>
                 {
@@ -56,6 +58,7 @@ client.on('messageCreate', async(message) =>
                     {
                         if(element[arg_name])
                         {
+                            timeLeft = ((3600000 * 12) - (time - element[arg_name])) / 3600000;
                             if((time - element[arg_name]) > 3600000 * 12)
                             {
                                 datau.users.splice(i, 1);
@@ -71,7 +74,7 @@ client.on('messageCreate', async(message) =>
 
                 if(!band)
                 {
-                    await message.channel.send('Wait until you can request another one');
+                    await message.channel.send('Wait! ' + Math.round(timeLeft) + ' hour cooldown 😎');
                     return;
                 }
                 
