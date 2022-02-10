@@ -3,9 +3,14 @@ require('dotenv').config();
 const fs = require('fs');
 const {Client, Intents} = require('discord.js');
 
+const Code = require('./models/code');
+const User = require('./models/user');
 const keepAlive = require('./server');
+const { dbConnection } = require('./config_database');
 
 const client = new Client({ intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
+
+dbConnection();
 
 client.on('ready', () =>
 {
@@ -25,102 +30,99 @@ client.on('messageCreate', async(message) =>
             if(command == '*get')
             {
                 const arg_name = args[0].toLocaleLowerCase();
-                const path = './db/data.json';
-                const data = JSON.parse(fs.readFileSync(path));
 
-                const pathu = './db/user.json';
-                const datau = JSON.parse(fs.readFileSync(pathu));
-
-                const names = [];
-                data.data.forEach((element, index) =>
-                {
-                    if(element.name == arg_name)
-                    {
-                        names.push({element, index});
-                    }
-                });
-
-                if(names.length < 1)
+                if(stock(arg_name) < 1)
                 {
                     message.channel.send('No codes available in DB');
                     return;
                 }
 
-                const user = message.author.id;
+                const users = await User.find();
+                
+                let timeLeft;
+                let elm;
+                const id = message.author.id;
                 const time = new Date().getTime();
 
-                let timeLeft;
-
-                let band = true;
-                datau.users.forEach(async(element, i) =>
+                let band = 0;
+                users.forEach(async(element) =>
                 {
-                    if(element.user == message.author.id)
+                    if(element.id == id)
                     {
-                        if(element[arg_name])
+                        let hour;
+                        if(message.member.roles.cache.has(process.env.C12))
                         {
-                            timeLeft = ((3600000 * 12) - (time - element[arg_name])) / 3600000;
-                            if((time - element[arg_name]) > 3600000 * 12)
-                            {
-                                datau.users.splice(i, 1);
-                                band = true;
-                            }
-                            else
-                            {
-                                band = false;
-                            }
+                            hour = 12;
+                        }
+                        else if(message.member.roles.cache.has(process.env.C3))
+                        {
+                            hour = 3;
+                        }
+                        else
+                        {
+                            hour = 12;
+                        }
+                        
+                        timeLeft = ((3600000 * hour) - (time - element.time)) / 3600000;
+                        if((time - element.time) > 3600000 * hour)
+                        {
+                            elm = element;
+                            band = 1;
+                        }
+                        else
+                        {
+                            band = 2;
                         }
                     }
                 });
-
-                if(!band)
+                
+                if(band == 1)
+                {
+                    await User.findByIdAndUpdate(elm._id, {id, time});
+                }
+                else if(band == 2)
                 {
                     await message.channel.send('Wait! ' + Math.round(timeLeft) + ' hour cooldown 😎');
                     return;
                 }
-                
-                const bbody = {user};
-                bbody[arg_name] = time;
-
-                datau.users.push(bbody);
-
-                fs.writeFileSync(pathu, JSON.stringify(datau));
-
-                const index = Math.floor(Math.random() * names.length);
-                const {element, index: i} = names[index];
-
-                client.users.cache.get(message.author.id).send(element["name"]);
-                for(let el in element)
+                else
                 {
-                    if(el != "name")
-                    {
-                        client.users.cache.get(message.author.id).send(element[el]);
-                    }
+                    const user = User({id, time});
+
+                    await user.save();
                 }
 
-                data.data.splice(i, 1);
+                const codes = await Code.find();
 
-                fs.writeFileSync(path, JSON.stringify(data));
+                const elements = []
+                codes.forEach((element) =>
+                {
+                    if(element.name == arg_name)
+                    {
+                        elements.push(element);
+                    }
+                });
+
+                const index = Math.floor(Math.random() * elements.length);
+
+                client.users.cache.get(message.author.id).send(elements[index].name);
+                client.users.cache.get(message.author.id).send(elements[index].value);
+
+                await Code.findByIdAndDelete(elements[index]._id);
+
+                await message.channel.send('Code sent');
             }
+        }
 
+        if(message.member.roles.cache.has(process.env.ADM) || message.member.roles.cache.has(process.env.BUY))
+        {
             if(command == '*stock')
             {
                 if(args[0] != undefined)
                 {
                     const name = args[0].toLowerCase();
 
-                    const path = './db/data.json';
-                    const data = JSON.parse(fs.readFileSync(path));
-
-                    const names = [];
-                    data.data.forEach((element, index) =>
-                    {
-                        if(element.name == name)
-                        {
-                            names.push({element, index});
-                        }
-                    });
-
-                    await message.channel.send(names.length + " " + name + ' codes in stock');
+                    await message.channel.send(stock(name) + " " + name + ' codes in stock');
                 }
             }
         }
@@ -130,47 +132,13 @@ client.on('messageCreate', async(message) =>
             if(command == '-add')
             {
                 const name = args[0].toLocaleLowerCase();
+                const value = args[1];
 
-                const body = {name};
+                const code = new Code({name, value});
 
-                args.forEach((element, index) =>
-                {
-                    if(index != 0)
-                    {
-                        body[index] = element;
-                    }
-                });
-
-                const path = './db/data.json';
-                const data = JSON.parse(fs.readFileSync(path));
-
-                data.data.push(body);
-
-                fs.writeFileSync(path, JSON.stringify(data));
+                await code.save();
 
                 await message.channel.send('Saved in DB');
-            }
-
-            if(command == '*stock')
-            {
-                if(args[0] != undefined)
-                {
-                    const name = args[0].toLowerCase();
-
-                    const path = './db/data.json';
-                    const data = JSON.parse(fs.readFileSync(path));
-
-                    const names = [];
-                    data.data.forEach((element, index) =>
-                    {
-                        if(element.name == name)
-                        {
-                            names.push({element, index});
-                        }
-                    });
-
-                    await message.channel.send(names.length + " " + name + ' codes in stock');
-                }
             }
         }
 
@@ -180,31 +148,30 @@ client.on('messageCreate', async(message) =>
             {
                 const mention = message.mentions.members.first();
 
-                const path = './db/user.json';
-                const data = JSON.parse(fs.readFileSync(path));
-
+                let member;
                 if(mention)
                 {
-                    data.users.forEach((element, index) =>
-                    {
-                        if(element.user == mention.user.id)
-                        {
-                            data.users.splice(index, 1);
-                        }
-                    });
+                    member = mention.user.id;
                 }
                 else
                 {
-                    data.users.forEach((element, index) =>
-                    {
-                        if(element.user == message.member.id)
-                        {
-                            data.users.splice(index, 1);
-                        }
-                    });
+                    member = message.member.id;
                 }
 
-                fs.writeFileSync(path, JSON.stringify(data));
+                const users = await User.find();
+
+                let elm;
+                users.forEach(async(element) =>
+                {
+                    if(element.id == member)
+                    {
+                        elm = element;
+                    }
+                });
+
+                await User.findByIdAndDelete(elm._id);
+
+                await message.channel.send('<@!' + member + '> cooldown reset');
             }
         }
     }
@@ -213,6 +180,22 @@ client.on('messageCreate', async(message) =>
         console.log(error);
     }
 });
+
+const stock = async(name) =>
+{
+    let stocks = 0;
+
+    const codes = await Code.find();
+    codes.forEach((element) =>
+    {
+        if(element.name == name)
+        {
+            stocks++;
+        }
+    });
+
+    return stocks;
+}
 
 if(process.env.PRODUCTION == 1)
 {
